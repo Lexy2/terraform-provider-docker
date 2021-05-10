@@ -1,0 +1,79 @@
+name: Acc Tests
+on:
+  push:
+    branches:
+      - master
+      - "release/**"
+  pull_request:
+    types: ['opened', 'synchronize']
+    paths:
+      - '**.go'
+      - go.mod
+      - '.github/workflows/**'
+  workflow_dispatch:
+    paths:
+      - '**.go'
+      - go.mod
+      - '.github/workflows/acc-test.yaml'
+
+env:
+  GOPROXY: https://proxy.golang.org,https://gocenter.io,direct
+  DEBIAN_FRONTEND: noninteractive
+  DOCKER_CE_VERSION: "5:20.10.5~3-0~ubuntu-focal"
+
+jobs:
+  acc-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        terraform_version: 
+        - "0.12.30"
+        - "0.13.6"
+        - "0.14.8"
+        os:
+        - ubuntu-20.04
+        - windows-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: '1.16'
+      
+      - run: cat /etc/issue
+        if: runner.os == 'Linux'
+      - run: bash scripts/gogetcookie.sh
+        if: runner.os == 'Linux'
+      # locally: docker run -it ubuntu:20.04 bash (https://ubuntu.pkgs.org/20.04/docker-ce-stable-amd64/)
+      - run: sudo apt-get update
+        if: runner.os == 'Linux'
+      - run: sudo apt-get -y install apt-transport-https ca-certificates curl gnupg-agent software-properties-common
+        if: runner.os == 'Linux'
+      - run: curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        if: runner.os == 'Linux'
+      - run: sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+        if: runner.os == 'Linux'
+      - run: sudo apt-get update
+        if: runner.os == 'Linux'
+      # list available docker versions: apt-cache policy docker-ce 
+      - run: sudo apt-get -y install docker-ce=${DOCKER_CE_VERSION}
+        if: runner.os == 'Linux'
+      - run: docker version
+      # Allow local registry to be insecure
+      - run: sudo sed 's/DOCKER_OPTS="/DOCKER_OPTS="--insecure-registry=127.0.0.1:15000 /g' -i /etc/default/docker
+        if: runner.os == 'Linux'
+      - run: sudo cat /etc/default/docker
+        if: runner.os == 'Linux'
+      - run: sudo service docker restart
+        if: runner.os == 'Linux'
+      - run: make testacc
+        env: 
+          TF_ACC_TERRAFORM_VERSION: ${{ matrix.terraform_version }}
+        if: runner.os == 'Linux'
+      - name: Run Windows integration tests
+        run: .\scripts\runAccTests.bat
+        shell: cmd
+        if: runner.os == 'Windows'
+        env: 
+          TF_ACC_TERRAFORM_VERSION: ${{ matrix.terraform_version }}
+
