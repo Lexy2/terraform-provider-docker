@@ -70,6 +70,8 @@ jobs:
         env: 
           TF_ACC_TERRAFORM_VERSION: ${{ matrix.terraform_version }}
         if: runner.os == 'Linux'
+      - name: Switch Docker Win to Linux containers
+        run: "C:\Program Files\Docker\Docker\DockerCli.exe" -SwitchLinuxEngine
       - name: Run Windows integration tests
         run: .\scripts\runAccTests.bat
         shell: cmd
